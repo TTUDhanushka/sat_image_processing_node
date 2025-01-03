@@ -10,6 +10,7 @@ from torchvision import transforms, models
 from time import perf_counter
 import os
 from PIL import Image
+from vector_export import ShapeFileGenerator
 
 
 class ImageClassifier:
@@ -30,6 +31,7 @@ class ImageClassifier:
 
         self.model = models.segmentation.fcn_resnet101(weights=None,
                                                         num_classes=7)
+        self.shapefile_export = None
 
     def load_saved_model(self) -> str:
         model_name = 'sat_segmentation_model_1.pt'
@@ -67,26 +69,31 @@ class ImageClassifier:
         # Set model for inference
         self.model.eval()
 
-        print(f"Model in evaluaton")
-
         preds = self.model(input_image)
+        class_preds = torch.argmax(preds['out'], dim=1)
 
-        print(f"Predicting")
-        classification_output = torch.argmax(preds['out'], dim=1)
+        # Remove one dimension from the classification result [1, 512, 512] -> [512, 512]
+        classification_output = torch.squeeze(class_preds, 0)
+
+        # Display binary layers
+        # shp_files = ShapeFileGenerator()
+        # shp_files.classification_to_binary(classification_output)
+        self.shapefile_export.classification_to_binary(classification_output)
 
         mapped_image = self.hot_decode(classification_output)
         pil_image = Image.fromarray(mapped_image.astype(np.uint8), 'RGB')
 
         pil_image.show()
 
-        print(f"Classification is done")
+        print(f"Classification imags shape {classification_output.shape}")
 
 
-    def hot_decode(self, classification_result):
+    def set_shapefile_generator(self, shapefile_obj):
+        self.shapefile_export = shapefile_obj
+
+    def hot_decode(self, image):
 
         result_image = np.zeros([self.img_height, self.img_width, self.channels], dtype= np.uint8)
-
-        image = torch.squeeze(classification_result, 0)
 
         for ix in range(self.img_height):
             for iy in range (self.img_width):
@@ -97,4 +104,6 @@ class ImageClassifier:
                 result_image[ix, iy, :] = rgb_triplets
         
         return result_image
+
+
 

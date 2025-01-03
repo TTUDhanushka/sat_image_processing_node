@@ -6,7 +6,7 @@
 
 import rospy
 from std_msgs.msg import Float32
-from geographic_msgs.msg import GeoPoint
+from geographic_msgs.msg import GeoPoint, MapFeature
 from threading import Thread, Lock, Event
 import datetime
 from sentinelhub import(
@@ -25,6 +25,7 @@ from geotypes import GeoBoundingBox, GeoCoordinate
 from typing import List, Tuple
 from time import sleep
 from classifier import ImageClassifier
+from vector_export import ShapeFileGenerator
 import numpy as np
 
 
@@ -83,17 +84,15 @@ class SentinelDownloader:
         return config
 
     def monitor_current_position(self, location_cache, stop_condition, classifier):
-        rospy.loginfo("In image download thread.")
         image_count = 0
 
         while not stop_condition.is_set():
             current_position = location_cache.get()
-            rospy.loginfo("In the loop")
 
             if current_position:
-                print(f"Location from download thread {current_position.longitude}, {current_position.latitude}")
+                print(f"Location from image download thread {current_position.longitude}, {current_position.latitude}")
 
-                if image_count < 2:
+                if image_count < 1:
                     image_ndarray = self.download_sat_imagery(target_position_wgs84=(current_position.longitude, current_position.latitude))
 
                     uint8_image = image_ndarray.astype(np.uint8)
@@ -260,6 +259,8 @@ def main() -> None:
     rospy.init_node(name='SatelliteImgProcessingNode',
                     anonymous=False)
 
+    water_map_layer_pub = rospy.Publisher('/water_layer', MapFeature, queue_size=10)
+
     stop_event = Event()
 
     # Constatntly check the GPS location. Check "/GPS" message.
@@ -273,6 +274,12 @@ def main() -> None:
     # Image classifier
     classifier_obj = ImageClassifier()
     classifier_obj.load_saved_model()
+
+    # Shapefile export
+    shapefile_generator = ShapeFileGenerator()
+    shapefile_generator.set_ros_topics(water_map_layer_pub)
+
+    classifier_obj.set_shapefile_generator(shapefile_generator)
 
     # Satellite imagery downloading thread
     sat_img_download = SentinelDownloader()
