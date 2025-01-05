@@ -95,9 +95,14 @@ class SentinelDownloader:
                 if image_count < 1:
                     image_ndarray = self.download_sat_imagery(target_position_wgs84=(current_position.longitude, current_position.latitude))
 
+
+                    # Set image coordinates for the map generation.
+                    btm_left_coords = self.get_bottom_left_coordinates_wgs84((current_position.longitude, current_position.latitude))
+                    # location_cache.set_img_btm_left_coords(btm_left_coords)
+
                     uint8_image = image_ndarray.astype(np.uint8)
 
-                    classifier.classify(uint8_image)
+                    classifier.classify(uint8_image, btm_left_coords)
 
                     image_count += 1
 
@@ -105,6 +110,12 @@ class SentinelDownloader:
                 print(f"Position hasn't been updated")
 
             sleep(5)
+
+    def get_bottom_left_coordinates_wgs84(self, center_coordinates_wgs84: Tuple[float]) -> List[GeoCoordinate]:
+        image_corners = self.get_all_image_tile_corners(center_coordinates_wgs84)
+
+        if image_corners:
+            return image_corners[0]
 
     def get_image_tile_bounds_wgs84(self, center_coordinates_wgs84: Tuple[float]) -> List[GeoCoordinate]:
         image_corners = self.get_all_image_tile_corners(center_coordinates_wgs84)
@@ -163,7 +174,7 @@ class SentinelDownloader:
             # Returns an empty list.
             return list()
 
-    def download_sat_imagery(self, target_position_wgs84: Tuple[float, float]):    # Lng, Lat
+    def download_sat_imagery(self, target_position_wgs84: Tuple[float]):    # Lng, Lat
 
         roi_bbox_wgs84 = self.get_image_tile_bounds_wgs84(target_position_wgs84)
 
@@ -194,15 +205,13 @@ class SentinelDownloader:
 
         image_data = true_color_sat_img[0]
 
-        print(f"First pixel data {image_data[0, 0, :]} and {image_data.dtype}")
-
         return true_color_sat_img[0]
 
 class GeoLocationCache:
     def __init__(self):
         self.mutex = Lock()
         self.cache = None
-    
+        self.image_btm_left_wgs84 = None     
     
     def set(self, coordinate: GeoCoordinate):
         self.mutex.acquire()
@@ -213,11 +222,29 @@ class GeoLocationCache:
         finally:
             self.mutex.release()
 
+    def set_img_btm_left_coords(self, img_coords_wgs84: GeoCoordinate):
+        self.mutex.acquire()
+
+        try:
+            self.image_btm_left_wgs84 = img_coords_wgs84
+
+        finally:
+            self.mutex.release()
+
     def get(self):
         self.mutex.acquire()
 
         try:
             return self.cache
+        
+        finally:
+            self.mutex.release()
+
+    def get_img_btm_left_coords(self):
+        self.mutex.acquire()
+
+        try:
+            return self.image_btm_left_wgs84
         
         finally:
             self.mutex.release()

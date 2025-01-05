@@ -11,6 +11,7 @@ from time import perf_counter
 import os
 from PIL import Image
 from vector_export import ShapeFileGenerator
+from geotypes import GeoCoordinate
 
 
 class ImageClassifier:
@@ -51,7 +52,7 @@ class ImageClassifier:
         self.model.to(self.device)
 
 
-    def classify(self, image: np.ndarray):
+    def classify(self, image: np.ndarray, image_bottom_lft_coord: GeoCoordinate):
 
         self.img_height, self.img_width, _ = image.shape
 
@@ -78,7 +79,7 @@ class ImageClassifier:
         # Display binary layers
         # shp_files = ShapeFileGenerator()
         # shp_files.classification_to_binary(classification_output)
-        self.shapefile_export.classification_to_binary(classification_output)
+        self.shapefile_export.classification_to_binary(classification_output, image_bottom_lft_coord)
 
         mapped_image = self.hot_decode(classification_output)
         pil_image = Image.fromarray(mapped_image.astype(np.uint8), 'RGB')
