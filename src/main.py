@@ -6,9 +6,10 @@
 
 import rospy
 from std_msgs.msg import Float32
+from sensor_msgs.msg import CompressedImage
 from geographic_msgs.msg import GeoPoint, MapFeature
 from threading import Thread, Lock, Event
-import datetime
+from datetime import datetime, timedelta
 from sentinelhub import(
     SHConfig,
     BBox,
@@ -42,12 +43,14 @@ class SentinelDownloader:
         # Initialization parameters
         self.RESOLUTION = 10
         self.SAT_IMG_RESOLUTION = 512
+        self.SAT_IMG_PREVIEW_RESOLUTION = 300
 
-        self.date_range = 28
-        self.today = datetime.date
+        self.date_range = timedelta(7)
 
-        self.start_date = datetime.datetime(2024, 12, 1)
-        self.end_date = datetime.datetime(2024, 12, 31)
+        self.end_date = datetime.today().date()
+        self.start_date = self.end_date - self.date_range
+
+        self.sat_image_preview_topic = None
 
         self.CRS = None
 
@@ -70,6 +73,10 @@ class SentinelDownloader:
                                                 return [2.5 * sample.B04, 2.5 * sample.B03, 2.5 * sample.B02];
                                             }
                                             """
+
+    def set_image_publishing_topic(self, image_publisher):
+        if not self.sat_image_preview_topic:
+            self.sat_image_preview_topic = image_publishers
 
     def get_config(self) -> SHConfig:
         config = SHConfig()
@@ -286,6 +293,9 @@ def main() -> None:
     rospy.init_node(name='SatelliteImgProcessingNode',
                     anonymous=False)
 
+    # True color satellite image preview topic
+    sat_img_preview_pub = rospy.Publisher('/sat_image_previe', CompressedImage, queue_size=10)
+
     water_map_layer_pub = rospy.Publisher('/water_layer', MapFeature, queue_size=10)
 
     stop_event = Event()
@@ -311,12 +321,10 @@ def main() -> None:
     # Satellite imagery downloading thread
     sat_img_download = SentinelDownloader()
 
-    
+        # Start satellite image download thread.
     sat_img_acquiring_thread = Thread(target=sat_img_download.monitor_current_position,
                                         args=(geo_location_cache, stop_event, classifier_obj))
     sat_img_acquiring_thread.start()
-
-
 
     rate = rospy.Rate(10)
 
@@ -328,9 +336,6 @@ def main() -> None:
             stop_event.set()
 
             sleep(10)
-
-
-    # Start satellite image download thread.
 
 
 if __name__ == "__main__":
