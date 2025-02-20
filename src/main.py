@@ -28,14 +28,16 @@ from time import sleep
 from classifier import ImageClassifier
 from vector_export import ShapeFileGenerator
 import numpy as np
+import cv2
+from PIL import Image
 
 
 class SentinelDownloader:
     def __init__(self) -> None:
         self.service_url = 'https://services.sentinel-hub.com'
         self.token_url = 'https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token'
-        self.sh_client_id = 'a4f60b54-1651-45b6-859f-e0bbe68e946e'
-        self.sh_client_secret = '3tkSRbFzn9JoFQr5stvlNXW63YOJy4PB'
+        self.sh_client_id = 'c72e8dc6-7d8a-4d59-9944-eb181165994b'
+        self.sh_client_secret = 'PQPZeX7yJ35iXSTMhJz0A82rL1cRuJlx'
 
         # Credentials profile
         self.profile = 'sentinel_data'
@@ -43,14 +45,15 @@ class SentinelDownloader:
         # Initialization parameters
         self.RESOLUTION = 10
         self.SAT_IMG_RESOLUTION = 512
-        self.SAT_IMG_PREVIEW_RESOLUTION = 300
+        self.SAT_IMG_PREVIEW_RESOLUTION = 280
 
-        self.date_range = timedelta(7)
+        NO_OF_DAYS_SPAN = 14 #Check images within 14 days
+        self.date_range = timedelta(NO_OF_DAYS_SPAN)
 
         self.end_date = datetime.today().date()
         self.start_date = self.end_date - self.date_range
 
-        self.sat_image_preview_topic = None
+        self.sat_image_preview_publisher = None
 
         self.CRS = None
 
@@ -74,9 +77,9 @@ class SentinelDownloader:
                                             }
                                             """
 
-    def set_image_publishing_topic(self, image_publisher):
-        if not self.sat_image_preview_topic:
-            self.sat_image_preview_topic = image_publishers
+    def set_image_publisher(self, image_publisher):
+        if not self.sat_image_preview_publisher:
+            self.sat_image_preview_publisher = image_publisher
 
     def get_config(self) -> SHConfig:
         config = SHConfig()
@@ -101,7 +104,6 @@ class SentinelDownloader:
 
                 if image_count < 1:
                     image_ndarray = self.download_sat_imagery(target_position_wgs84=(current_position.longitude, current_position.latitude))
-
 
                     # Set image coordinates for the map generation.
                     btm_left_coords = self.get_bottom_left_coordinates_wgs84((current_position.longitude, current_position.latitude))
@@ -210,9 +212,24 @@ class SentinelDownloader:
         
         true_color_sat_img = true_color_image_request.get_data(save_data=True)
 
-        image_data = true_color_sat_img[0]
+        image_data_temp = (true_color_sat_img[0] / 3.5) * 255.0
 
-        return true_color_sat_img[0]
+        image_data = image_data_temp.astype(np.uint8)
+
+        resized_preview_img = cv2.resize(image_data, (self.SAT_IMG_PREVIEW_RESOLUTION, self.SAT_IMG_PREVIEW_RESOLUTION))
+
+        # Compressed image for preview on web UI
+        _, compressed_img_preview = cv2.imencode('.jpg', resized_preview_img)
+
+        # Web UI preview image message
+        preview_img_msg = CompressedImage()
+        preview_img_msg.header.stamp = rospy.Time.now()
+        preview_img_msg.format = "jpeg"
+        preview_img_msg.data = np.array(compressed_img_preview).tobytes()
+
+        self.sat_image_preview_publisher.publish(preview_img_msg)
+
+        return image_data_temp
 
 class GeoLocationCache:
     def __init__(self):
@@ -294,7 +311,7 @@ def main() -> None:
                     anonymous=False)
 
     # True color satellite image preview topic
-    sat_img_preview_pub = rospy.Publisher('/sat_image_previe', CompressedImage, queue_size=10)
+    sat_img_preview_pub = rospy.Publisher('/sat_image_preview', CompressedImage, queue_size=10)
 
     water_map_layer_pub = rospy.Publisher('/water_layer', MapFeature, queue_size=10)
 
@@ -320,6 +337,7 @@ def main() -> None:
 
     # Satellite imagery downloading thread
     sat_img_download = SentinelDownloader()
+    sat_img_download.set_image_publisher(sat_img_preview_pub)
 
         # Start satellite image download thread.
     sat_img_acquiring_thread = Thread(target=sat_img_download.monitor_current_position,
