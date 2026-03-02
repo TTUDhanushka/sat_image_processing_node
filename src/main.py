@@ -36,8 +36,8 @@ class SentinelDownloader:
     def __init__(self) -> None:
         self.service_url = 'https://services.sentinel-hub.com'
         self.token_url = 'https://services.sentinel-hub.com/auth/realms/main/protocol/openid-connect/token'
-        self.sh_client_id = 'c72e8dc6-7d8a-4d59-9944-eb181165994b'
-        self.sh_client_secret = 'PQPZeX7yJ35iXSTMhJz0A82rL1cRuJlx'
+        self.sh_client_id = 'e27c2384-9316-4f3b-9a81-29c1f1ed2a17'
+        self.sh_client_secret = '9M2Tsx1qCITJyWv0Yd0iWtAh1DZupVoI'
 
         # Credentials profile
         self.profile = 'sentinel_data'
